@@ -57,58 +57,41 @@ const userSchema = new mongoose.Schema({
 // Create User model
 const User = mongoose.model('User', userSchema);
 
-// Replace with your actual Paytm MID, Key, and Website values
-const PAYTM_MID = process.env.PAYTM_MID || 'YOUR_ACTUAL_PAYTM_MID';
-const PAYTM_KEY = process.env.PAYTM_KEY || 'YOUR_ACTUAL_PAYTM_KEY';
-const PAYTM_WEBSITE = process.env.PAYTM_WEBSITE || 'DEFAULT'; // Use 'WEBSTAGING' for testing, 'DEFAULT' for production
-const PAYTM_CALLBACK_URL = process.env.PAYTM_CALLBACK_URL || 'https://cozycatkitchen-backend.vercel.app/payment-success'; // Update with your actual callback URL
+// Replace with your actual Razorpay keys or other service keys
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'YOUR_RAZORPAY_KEY_ID';
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'YOUR_RAZORPAY_KEY_SECRET';
 
 // Replace with your actual Shiprocket API token
 const SHIPROCKET_TOKEN = process.env.SHIPROCKET_TOKEN || 'YOUR_ACTUAL_SHIPROCKET_API_TOKEN';
 
-// Paytm Create Subscription (Recurring Payment)
-app.post('/create-paytm-subscription', (req, res) => {
-    const { amount, email, phone, subscriptionFrequency } = req.body;
+// Razorpay Create Subscription (Recurring Payment)
+app.post('/create-razorpay-subscription', (req, res) => {
+    const { planId, email, phone } = req.body;
 
-    const orderId = `ORDERID_${new Date().getTime()}`;  // Generate unique order ID
-    const paytmParams = {
-        body: {
-            requestType: "Subscription",
-            mid: PAYTM_MID,
-            websiteName: PAYTM_WEBSITE,
-            orderId: orderId,
-            callbackUrl: PAYTM_CALLBACK_URL,
-            txnAmount: {
-                value: amount.toFixed(2),
-                currency: "INR",
-            },
-            subscriptionDetails: {
-                frequency: subscriptionFrequency, // Example: 'WEEKLY', 'MONTHLY'
-                amount: amount,
-                startDate: new Date().toISOString(),
-                customer: {
-                    custId: email,
-                    mobile: phone
-                }
-            }
-        }
+    const subscriptionOptions = {
+        plan_id: planId,  // Plan ID from Razorpay
+        customer_notify: 1,  // Notify customer via SMS/Email
+        total_count: 12,  // Number of billing cycles
+        quantity: 1,  // Number of items per billing
+        start_at: Math.floor(Date.now() / 1000) + 60,  // Subscription start time (1 minute from now)
+        expire_by: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60)  // 1-year expiration
     };
 
-    // Call Paytm API to create subscription
-    axios.post(`https://securegw.paytm.in/subscription/initiate`, paytmParams, {
-        headers: {
-            'Content-Type': 'application/json'
+    axios.post(`https://api.razorpay.com/v1/subscriptions`, subscriptionOptions, {
+        auth: {
+            username: RAZORPAY_KEY_ID,
+            password: RAZORPAY_KEY_SECRET
         }
     })
     .then(response => {
         res.json({
-            subscriptionId: response.data.body.subscriptionId,
-            orderId: orderId
+            subscription_id: response.data.id,
+            message: 'Subscription created successfully'
         });
     })
     .catch(error => {
-        console.error('Error creating Paytm subscription:', error.message);
-        res.status(500).json({ error: 'Error creating Paytm subscription' });
+        console.error('Error creating Razorpay subscription:', error.message);
+        res.status(500).json({ error: 'Error creating Razorpay subscription' });
     });
 });
 
