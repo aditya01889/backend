@@ -1,48 +1,48 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
-const cron = require('node-cron');  // For scheduling recurring Shiprocket shipments
-const mongoose = require('mongoose');  // Mongoose for MongoDB
-const helmet = require('helmet');  // Helmet for security headers
-const rateLimit = require('express-rate-limit');  // Rate limiting middleware
-const cors = require('cors');  // CORS middleware
+const cron = require('node-cron');
+const mongoose = require('mongoose');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const cors = require('cors');
 
 const app = express();
 
 // Set security headers using helmet
 app.use(helmet());
 
-// Limit repeated requests to public APIs and endpoints
+// Limit repeated requests
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100 // Limit each IP to 100 requests per windowMs
+    windowMs: 15 * 60 * 1000,
+    max: 100
 });
 app.use(limiter);
 
-// Enable CORS for your frontend only
+// Enable CORS for your frontend
 app.use(cors({
-    origin: 'https://yourfrontend.com',  // Replace with your actual frontend URL
-    methods: 'GET,POST'  // Limit methods to what you need
+    origin: 'https://yourfrontend.com',
+    methods: 'GET,POST'
 }));
 
 app.use(bodyParser.json());
 
-// Replace with your actual MongoDB URI
+// MongoDB connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/cozycat';
 
-// Connect to MongoDB using Mongoose
 mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log('MongoDB connected'))
     .catch(err => console.log('MongoDB connection error: ', err));
 
-// Define the User schema with subscription and cart details
+// User schema
 const userSchema = new mongoose.Schema({
     name: String,
     email: String,
     phone: String,
     address: String,
     subscription: {
-        frequency: String,  // 'WEEKLY', 'MONTHLY'
+        subscriptionId: String,  // Razorpay subscription ID
+        frequency: String,
         active: Boolean,
         startDate: Date
     },
@@ -54,30 +54,28 @@ const userSchema = new mongoose.Schema({
     }]
 });
 
-// Create User model
 const User = mongoose.model('User', userSchema);
 
-// Replace with your actual Razorpay keys or other service keys
+// Razorpay keys
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'YOUR_RAZORPAY_KEY_ID';
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'YOUR_RAZORPAY_KEY_SECRET';
 
-// Replace with your actual Shiprocket API token
-const SHIPROCKET_TOKEN = process.env.SHIPROCKET_TOKEN || 'YOUR_ACTUAL_SHIPROCKET_API_TOKEN';
+// Shiprocket token
+const SHIPROCKET_TOKEN = process.env.SHIPROCKET_TOKEN || 'YOUR_SHIPROCKET_API_TOKEN';
 
-// Razorpay Create Subscription (Recurring Payment)
+// Razorpay Subscription Creation
 app.post('/create-razorpay-subscription', (req, res) => {
     const { planId, email, phone } = req.body;
 
     const subscriptionOptions = {
-        plan_id: planId,  // Plan ID from Razorpay
-        customer_notify: 1,  // Notify customer via SMS/Email
-        total_count: 12,  // Number of billing cycles
-        quantity: 1,  // Number of items per billing
-        start_at: Math.floor(Date.now() / 1000) + 60,  // Subscription start time (1 minute from now)
-        expire_by: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60)  // 1-year expiration
+        plan_id: planId,
+        customer_notify: 1,
+        total_count: 12, // 12 billing cycles (weekly)
+        quantity: 1,
+        start_at: Math.floor(Date.now() / 1000) + 60
     };
 
-    axios.post(`https://api.razorpay.com/v1/subscriptions`, subscriptionOptions, {
+    axios.post('https://api.razorpay.com/v1/subscriptions', subscriptionOptions, {
         auth: {
             username: RAZORPAY_KEY_ID,
             password: RAZORPAY_KEY_SECRET
@@ -95,7 +93,42 @@ app.post('/create-razorpay-subscription', (req, res) => {
     });
 });
 
-// Shiprocket Create Order
+// Razorpay Webhook for Subscription Payments
+app.post('/razorpay-webhook', (req, res) => {
+    const webhookBody = req.body;
+
+    if (webhookBody.event === 'subscription.charged') {
+        const subscriptionId = webhookBody.payload.subscription.entity.id;
+        const customerId = webhookBody.payload.subscription.entity.customer_id;
+
+        handleSubscriptionCharged(subscriptionId, customerId)
+            .then(() => res.status(200).send('Webhook handled successfully'))
+            .catch(err => {
+                console.error('Error handling subscription charged webhook:', err);
+                res.status(500).send('Error processing webhook');
+            });
+    } else {
+        res.status(400).send('Unhandled webhook event');
+    }
+});
+
+// Handling the subscription charge
+async function handleSubscriptionCharged(subscriptionId, customerId) {
+    try {
+        const user = await User.findOne({ 'subscription.subscriptionId': subscriptionId });
+
+        if (user) {
+            createShiprocketOrder(user);
+        } else {
+            throw new Error('User not found for subscription ID: ' + subscriptionId);
+        }
+    } catch (error) {
+        console.error('Error in handleSubscriptionCharged:', error);
+        throw error;
+    }
+}
+
+// Shiprocket Order Creation
 app.post('/create-shiprocket-order', (req, res) => {
     const orderDetails = req.body;
 
@@ -113,11 +146,9 @@ app.post('/create-shiprocket-order', (req, res) => {
     });
 });
 
-// Schedule recurring Shiprocket orders (use cron for recurring tasks)
+// Cron job to create recurring orders
 cron.schedule('0 0 * * *', async () => {
-    console.log('Running a job every day at midnight');
-
-    // Fetch the users with active subscriptions from MongoDB
+    console.log('Running job every day at midnight');
     const usersWithSubscriptions = await getUsersWithActiveSubscriptions();
 
     usersWithSubscriptions.forEach(user => {
@@ -125,7 +156,7 @@ cron.schedule('0 0 * * *', async () => {
     });
 });
 
-// Function to fetch users with active subscriptions from MongoDB
+// Fetch users with active subscriptions
 async function getUsersWithActiveSubscriptions() {
     try {
         const users = await User.find({ 'subscription.active': true });
@@ -139,7 +170,7 @@ async function getUsersWithActiveSubscriptions() {
 // Create Shiprocket Order for users
 function createShiprocketOrder(user) {
     const orderDetails = {
-        "order_id": `ORDER_${new Date().getTime()}`,  // Unique ID for your order
+        "order_id": `ORDER_${new Date().getTime()}`,
         "order_date": new Date().toISOString(),
         "pickup_location": "Primary Pickup Location",
         "billing_customer_name": user.name,
@@ -167,12 +198,6 @@ function createShiprocketOrder(user) {
         console.error('Error creating recurring Shiprocket order:', error.message);
     });
 }
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-    console.error(err.stack);  // Log error stack
-    res.status(500).send('Something went wrong!');  // Generic message for clients
-});
 
 // Start the server
 const PORT = process.env.PORT || 3000;
