@@ -21,7 +21,7 @@ app.use(limiter);
 
 // Enable CORS for your frontend
 app.use(cors({
-    origin: 'https://yourfrontend.com',  // Update with actual frontend URL
+    origin: 'https://aditya01889.github.io/cozy-cat-kitchen/',  // Update with actual frontend URL
     methods: 'GET,POST'
 }));
 
