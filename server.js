@@ -20,9 +20,18 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // Enable CORS for your frontend
+const allowedOrigins = ['https://aditya01889.github.io', 'http://localhost:3001'];
+
 app.use(cors({
-    origin: 'https://aditya01889.github.io/cozy-cat-kitchen/',  // Update with actual frontend URL
-    methods: 'GET,POST'
+    origin: function (origin, callback) {
+        if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: 'GET,POST',
+    credentials: true  // Allow credentials (optional, if needed)
 }));
 
 app.use(bodyParser.json());
