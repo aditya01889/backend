@@ -31,7 +31,7 @@ app.use(cors({
         }
     },
     methods: 'GET,POST',
-    credentials: true  // Allow credentials (optional, if needed)
+    credentials: true  // Allow credentials if needed
 }));
 
 app.use(bodyParser.json());
