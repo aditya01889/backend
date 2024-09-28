@@ -72,34 +72,45 @@ const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'YOUR_RAZORPAY_KE
 // Shiprocket token
 const SHIPROCKET_TOKEN = process.env.SHIPROCKET_TOKEN || 'YOUR_SHIPROCKET_API_TOKEN';
 
-// Razorpay Subscription Creation
-app.post('/create-razorpay-subscription', (req, res) => {
-    const { planId, email, phone } = req.body;
+// Razorpay Subscription Creation for multiple items
+app.post('/create-razorpay-subscriptions', async (req, res) => {
+    const { cart, email, phone } = req.body;
 
-    const subscriptionOptions = {
-        plan_id: planId,
-        customer_notify: 1,
-        total_count: 12, // 12 billing cycles (weekly)
-        quantity: 1,
-        start_at: Math.floor(Date.now() / 1000) + 60
-    };
+    try {
+        const subscriptionIds = [];
 
-    axios.post('https://api.razorpay.com/v1/subscriptions', subscriptionOptions, {
-        auth: {
-            username: RAZORPAY_KEY_ID,
-            password: RAZORPAY_KEY_SECRET
+        // Loop through each item in the cart and create a subscription
+        for (const item of cart) {
+            const subscriptionOptions = {
+                plan_id: item.planId,
+                customer_notify: 1,
+                total_count: 12, // 12 billing cycles (weekly)
+                quantity: item.quantity,
+                start_at: Math.floor(Date.now() / 1000) + 60
+            };
+
+            const response = await axios.post('https://api.razorpay.com/v1/subscriptions', subscriptionOptions, {
+                auth: {
+                    username: RAZORPAY_KEY_ID,
+                    password: RAZORPAY_KEY_SECRET
+                }
+            });
+
+            subscriptionIds.push({
+                itemName: item.name,
+                subscriptionId: response.data.id
+            });
         }
-    })
-    .then(response => {
+
         res.json({
-            subscription_id: response.data.id,
-            message: 'Subscription created successfully'
+            subscriptionIds,
+            message: 'Subscriptions created successfully'
         });
-    })
-    .catch(error => {
-        console.error('Error creating Razorpay subscription:', error.message);
-        res.status(500).json({ error: 'Error creating Razorpay subscription' });
-    });
+
+    } catch (error) {
+        console.error('Error creating Razorpay subscriptions:', error.message);
+        res.status(500).json({ error: 'Error creating Razorpay subscriptions' });
+    }
 });
 
 // Razorpay Webhook for Subscription Payments
@@ -139,7 +150,24 @@ async function handleSubscriptionCharged(subscriptionId, customerId) {
 
 // Shiprocket Order Creation
 app.post('/create-shiprocket-order', (req, res) => {
-    const orderDetails = req.body;
+    const { cart, ...userData } = req.body;
+
+    const orderDetails = {
+        "order_id": `ORDER_${new Date().getTime()}`,
+        "order_date": new Date().toISOString(),
+        "pickup_location": "Primary Pickup Location",
+        "billing_customer_name": userData.name,
+        "billing_address": userData.address,
+        "billing_city": "Noida",
+        "billing_pincode": "201301",
+        "billing_country": "India",
+        "order_items": cart.map(item => ({
+            name: item.name,
+            sku: item.sku,
+            units: item.quantity,
+            selling_price: item.price
+        }))
+    };
 
     axios.post('https://apiv2.shiprocket.in/v1/external/orders/create/adhoc', orderDetails, {
         headers: {
