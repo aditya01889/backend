@@ -13,6 +13,9 @@ const cors = require('cors');
 
 const app = express();
 
+// Trust proxy settings for cloud deployments (Render, etc.)
+app.set('trust proxy', 1);
+
 // Set security headers using helmet
 app.use(helmet());
 
@@ -109,7 +112,7 @@ app.post('/create-razorpay-subscriptions', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error creating Razorpay subscriptions:', error.message);
+        console.error('Error creating Razorpay subscriptions:', error.response?.data || error.message);
         res.status(500).json({ error: 'Error creating Razorpay subscriptions' });
     }
 });
