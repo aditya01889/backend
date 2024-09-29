@@ -1,5 +1,6 @@
 // Load environment variables from .env files
 require('dotenv').config();
+const config = require('./config');  // Import the config file
 
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -23,11 +24,9 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // Enable CORS for your frontend
-const allowedOrigins = [process.env.FRONTEND_URL, 'http://localhost:3001'];
-
 const corsOptions = {
     origin: function (origin, callback) {
-        if (!origin || allowedOrigins.includes(origin)) {
+        if (!origin || config.allowedOrigins.includes(origin)) {
             callback(null, true);  // Allow the origin if it's in the allowedOrigins list or if no origin (server-side requests)
         } else {
             callback(new Error('Not allowed by CORS'));  // Block other origins
@@ -43,9 +42,7 @@ app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
 // MongoDB connection
-const MONGODB_URI = process.env.MONGODB_URI;
-
-mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect(config.mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log('MongoDB connected'))
     .catch(err => console.log('MongoDB connection error: ', err));
 
@@ -71,10 +68,10 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-// Razorpay and Shiprocket tokens
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
-const SHIPROCKET_TOKEN = process.env.SHIPROCKET_TOKEN;
+// Razorpay and Shiprocket tokens from config
+const RAZORPAY_KEY_ID = config.razorpayKeyId;
+const RAZORPAY_KEY_SECRET = config.razorpayKeySecret;
+const SHIPROCKET_TOKEN = config.shiprocketToken;
 
 // Razorpay Subscription Creation for multiple items
 app.post('/create-razorpay-subscriptions', async (req, res) => {
@@ -241,7 +238,7 @@ function createShiprocketOrder(user) {
 }
 
 // Start the server
-const PORT = process.env.PORT || 3000;
+const PORT = config.port;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
