@@ -1,3 +1,6 @@
+// Load environment variables from .env files
+require('dotenv').config();
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
@@ -14,30 +17,33 @@ app.use(helmet());
 
 // Limit repeated requests
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
 });
 app.use(limiter);
 
 // Enable CORS for your frontend
-const allowedOrigins = ['https://aditya01889.github.io', 'http://localhost:3001'];
+const allowedOrigins = [process.env.FRONTEND_URL, 'http://localhost:3001'];
 
-app.use(cors({
+const corsOptions = {
     origin: function (origin, callback) {
-        if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
-            callback(null, true);
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);  // Allow the origin if it's in the allowedOrigins list or if no origin (server-side requests)
         } else {
-            callback(new Error('Not allowed by CORS'));
+            callback(new Error('Not allowed by CORS'));  // Block other origins
         }
     },
-    methods: 'GET,POST',
-    credentials: true  // Allow credentials if needed
-}));
+    methods: 'GET,POST',  // Allow only the methods you're using
+    credentials: true,  // Allow credentials (if needed)
+    allowedHeaders: ['Content-Type', 'Authorization'],  // Allow specific headers
+};
+
+app.use(cors(corsOptions));
 
 app.use(bodyParser.json());
 
 // MongoDB connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/cozycat';
+const MONGODB_URI = process.env.MONGODB_URI;
 
 mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log('MongoDB connected'))
@@ -65,12 +71,10 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-// Razorpay keys
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'YOUR_RAZORPAY_KEY_ID';
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'YOUR_RAZORPAY_KEY_SECRET';
-
-// Shiprocket token
-const SHIPROCKET_TOKEN = process.env.SHIPROCKET_TOKEN || 'YOUR_SHIPROCKET_API_TOKEN';
+// Razorpay and Shiprocket tokens
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+const SHIPROCKET_TOKEN = process.env.SHIPROCKET_TOKEN;
 
 // Razorpay Subscription Creation for multiple items
 app.post('/create-razorpay-subscriptions', async (req, res) => {

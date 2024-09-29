@@ -1,1 +1,5 @@
 .vercel
+# Ignore environment variable files
+.env
+.env.development
+.env.production
