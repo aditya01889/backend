@@ -86,7 +86,7 @@ app.post('/create-razorpay-subscriptions', async (req, res) => {
         // Loop through each item in the cart and create a subscription
         for (const item of cart) {
             const subscriptionOptions = {
-                plan_id: item.planId,
+                plan_id: item.planId,  // Make sure 'plan_id' is sent correctly from frontend
                 customer_notify: 1,
                 total_count: 12, // 12 billing cycles (weekly)
                 quantity: item.quantity,
